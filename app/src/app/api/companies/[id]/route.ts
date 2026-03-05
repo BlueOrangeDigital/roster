@@ -12,41 +12,47 @@ export async function GET(
   }
 
   const { id } = await params;
-  const company = await prisma.company.findUnique({
-    where: { id },
-    include: {
-      assignments: {
-        include: {
-          candidate: true,
-          reviews: {
-            include: { reviewer: { select: { name: true, email: true, id: true } } },
+  let company;
+  try {
+    company = await prisma.company.findUnique({
+      where: { id },
+      include: {
+        assignments: {
+          include: {
+            candidate: true,
+            reviews: {
+              include: { reviewer: { select: { name: true, email: true, id: true } } },
+            },
           },
         },
-      },
-      reviewers: { select: { id: true, name: true, email: true } },
-      roles: {
-        orderBy: { createdAt: "asc" },
-        include: {
-          assignments: {
-            include: {
-              candidate: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
-                  email: true,
-                  pictureUrl: true,
-                  summary: true,
-                  skills: true,
-                  experience: true,
+        reviewers: { select: { id: true, name: true, email: true } },
+        roles: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            assignments: {
+              include: {
+                candidate: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    pictureUrl: true,
+                    summary: true,
+                    skills: true,
+                    experience: true,
+                  },
                 },
               },
             },
           },
         },
       },
-    },
-  });
+    });
+  } catch (err) {
+    console.error("[GET /api/companies/[id]] Prisma error:", err);
+    return NextResponse.json({ error: "Database error", detail: String(err) }, { status: 500 });
+  }
 
   if (!company) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

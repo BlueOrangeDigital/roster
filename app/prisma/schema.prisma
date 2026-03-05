@@ -14,7 +14,6 @@ enum UserRole {
 
 enum ReviewStatus {
   NOT_REVIEWED
-  INTERESTED
   REQUEST_INTERVIEW
   NOT_INTERESTED
 }

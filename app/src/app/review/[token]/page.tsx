@@ -365,11 +365,10 @@ export default function ReviewPortal({ params }: { params: Promise<{ token: stri
             <p className="text-navy-400 text-sm mt-1">Review and provide feedback on each candidate</p>
           </div>
           <div className="flex gap-1.5 bg-white border border-navy-100/80 p-1 rounded-xl shadow-sm">
-            {["all", "not_reviewed", "INTERESTED", "REQUEST_INTERVIEW", "NOT_INTERESTED"].map((f) => {
+            {["all", "not_reviewed", "REQUEST_INTERVIEW", "NOT_INTERESTED"].map((f) => {
               const labels: Record<string, string> = {
                 all: "All",
                 not_reviewed: "To Review",
-                INTERESTED: "Interested",
                 REQUEST_INTERVIEW: "Interview",
                 NOT_INTERESTED: "Not Interested",
               };
@@ -559,9 +558,8 @@ function ReviewCandidateView({
             Your Review
           </h2>
 
-          <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-2 gap-3 mb-6">
             {[
-              { value: "INTERESTED", label: "Interested", icon: "M20 6L9 17l-5-5", activeBg: "bg-green-50 border-green-300 text-green-700", activeRing: "ring-green-200" },
               { value: "REQUEST_INTERVIEW", label: "Request Interview", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", activeBg: "bg-orange-50 border-orange-300 text-orange-700", activeRing: "ring-orange-200" },
               { value: "NOT_INTERESTED", label: "Not Interested", icon: "M18 6L6 18M6 6l12 12", activeBg: "bg-red-50 border-red-300 text-red-700", activeRing: "ring-red-200" },
             ].map((option) => (
@@ -681,12 +679,10 @@ function CandidateCard({ candidate, onClick }: { candidate: Candidate; onClick: 
 
 function ReviewBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    INTERESTED: "bg-green-50 text-green-700 border-green-200",
     REQUEST_INTERVIEW: "bg-orange-50 text-orange-700 border-orange-200",
     NOT_INTERESTED: "bg-red-50 text-red-700 border-red-200",
   };
   const labels: Record<string, string> = {
-    INTERESTED: "Interested",
     REQUEST_INTERVIEW: "Interview",
     NOT_INTERESTED: "Not Interested",
   };
