@@ -23,6 +23,7 @@ export default function CandidateEditPage({ params }: { params: Promise<{ id: st
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
@@ -70,6 +71,13 @@ export default function CandidateEditPage({ params }: { params: Promise<{ id: st
     if (res.ok) setMessage("Saved successfully");
     else setMessage("Save failed");
     setSaving(false);
+  }
+
+  async function handleDelete() {
+    if (!confirm("Delete this candidate? This cannot be undone.")) return;
+    setDeleting(true);
+    await fetch(`/api/candidates/${id}`, { method: "DELETE" });
+    router.push("/admin/candidates");
   }
 
   async function handleResync() {
@@ -203,6 +211,13 @@ export default function CandidateEditPage({ params }: { params: Promise<{ id: st
             className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-md text-sm disabled:opacity-60 transition-colors"
           >
             {saving ? "Saving…" : "Save"}
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="px-3.5 py-2 border border-red-200 text-red-500 hover:bg-red-50 rounded-md text-sm font-medium disabled:opacity-60 transition-colors"
+          >
+            {deleting ? "Deleting…" : "Delete"}
           </button>
         </div>
       </div>

@@ -51,6 +51,7 @@ export default function CandidatesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchCandidates = useCallback(async () => {
     try {
@@ -137,6 +138,17 @@ export default function CandidatesPage() {
       else next.add(id);
       return next;
     });
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this candidate? This cannot be undone.")) return;
+    setDeletingId(id);
+    try {
+      await fetch(`/api/candidates/${id}`, { method: "DELETE" });
+      setCandidates((prev) => prev.filter((c) => c.id !== id));
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function handleImport() {
@@ -403,13 +415,22 @@ export default function CandidatesPage() {
                     <span className="text-sm font-semibold text-navy-700">{c._count.reviews}</span>
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <Link
-                      href={`/admin/candidates/${c.id}`}
-                      className="text-xs text-orange-500 hover:text-orange-600 font-semibold inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      Edit
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-                    </Link>
+                    <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Link
+                        href={`/admin/candidates/${c.id}`}
+                        className="text-xs text-orange-500 hover:text-orange-600 font-semibold inline-flex items-center gap-1"
+                      >
+                        Edit
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(c.id)}
+                        disabled={deletingId === c.id}
+                        className="text-xs text-navy-300 hover:text-red-500 font-medium transition-colors disabled:opacity-40"
+                      >
+                        {deletingId === c.id ? "…" : "Delete"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
