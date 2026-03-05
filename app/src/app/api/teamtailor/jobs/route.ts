@@ -41,7 +41,7 @@ export async function GET() {
       status: j.attributes["human-status"] ?? "unknown",
     }));
 
-    return NextResponse.json({ jobs });
+    return NextResponse.json({ jobs, total: data.meta?.["record-count"] ?? jobs.length });
   } catch {
     return NextResponse.json({ error: "Failed to fetch jobs from Team Tailor" }, { status: 502 });
   }

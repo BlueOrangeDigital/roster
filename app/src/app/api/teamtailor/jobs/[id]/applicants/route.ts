@@ -13,6 +13,10 @@ export async function GET(
 
   const { id } = await params;
 
+  if (!/^\d+$/.test(id)) {
+    return NextResponse.json({ error: "Invalid job id" }, { status: 400 });
+  }
+
   const config = await prisma.teamTailorConfig.findFirst();
   if (!config) {
     return NextResponse.json({ error: "Team Tailor not configured" }, { status: 400 });
@@ -88,7 +92,11 @@ export async function GET(
       });
     }
 
-    return NextResponse.json({ candidates, total: candidates.length });
+    return NextResponse.json({
+      candidates,
+      total: candidates.length,
+      totalInTT: data.meta?.["record-count"] ?? candidates.length,
+    });
   } catch {
     return NextResponse.json({ error: "Failed to fetch applicants from Team Tailor" }, { status: 502 });
   }
