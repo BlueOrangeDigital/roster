@@ -28,11 +28,19 @@ interface Candidate {
   assignmentId: string;
   firstName: string;
   summary: string | null;
+  tailoredSummary: string | null;
+  role: { id: string; title: string } | null;
   skills: string[];
   experience: Experience[];
   education: Education[];
   pictureUrl: string | null;
   myReview: CandidateReview | null;
+}
+
+interface RoleGroup {
+  id: string;
+  title: string;
+  candidates: Candidate[];
 }
 
 interface PortalData {
@@ -213,7 +221,7 @@ export default function ReviewPortal({ params }: { params: Promise<{ token: stri
                 </div>
                 <p className="text-navy-700 font-bold mb-1">Check your email</p>
                 <p className="text-navy-400 text-sm mb-4">We sent a login link to {email}</p>
-                {magicLink && (
+                {process.env.NODE_ENV === "development" && magicLink && (
                   <button
                     onClick={handleMagicLinkAuth}
                     className="text-sm text-orange-500 hover:text-orange-600 font-semibold underline"
@@ -302,6 +310,22 @@ export default function ReviewPortal({ params }: { params: Promise<{ token: stri
     );
   }
 
+  const totalRoleCount = new Set(candidates.map(c => c.role?.id ?? "__none__")).size;
+  const useGroupedLayout = totalRoleCount > 1;
+  const roleGroups: RoleGroup[] = [];
+  if (useGroupedLayout) {
+    const seenRoles = new Map<string, RoleGroup>();
+    for (const c of filteredCandidates) {
+      const roleKey = c.role?.id ?? "__none__";
+      if (!seenRoles.has(roleKey)) {
+        const group: RoleGroup = { id: roleKey, title: c.role?.title ?? "General", candidates: [] };
+        seenRoles.set(roleKey, group);
+        roleGroups.push(group);
+      }
+      seenRoles.get(roleKey)!.candidates.push(c);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-cream-50">
       {/* Header */}
@@ -362,52 +386,28 @@ export default function ReviewPortal({ params }: { params: Promise<{ token: stri
           </div>
         </div>
 
-        {/* Candidate Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stagger-children">
-          {filteredCandidates.map((candidate) => (
-            <button
-              key={candidate.id}
-              onClick={() => setSelectedCandidate(candidate)}
-              className="bg-white rounded-2xl border border-navy-100/80 p-6 text-left card-hover group shadow-sm"
-            >
-              <div className="flex items-center gap-3.5 mb-4">
-                {candidate.pictureUrl ? (
-                  <img src={candidate.pictureUrl} alt="" className="w-14 h-14 rounded-xl object-cover ring-2 ring-navy-100" />
-                ) : (
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-lg font-bold text-navy-600">
-                    {candidate.firstName[0]}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-navy-900 group-hover:text-orange-600 transition-colors text-base">
-                    {candidate.firstName}
-                  </h3>
-                  {candidate.myReview && candidate.myReview.status !== "NOT_REVIEWED" ? (
-                    <ReviewBadge status={candidate.myReview.status} />
-                  ) : (
-                    <span className="text-[11px] font-semibold text-navy-400">Awaiting review</span>
-                  )}
-                </div>
-                <svg className="w-5 h-5 text-navy-200 group-hover:text-orange-400 transition-colors shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-              </div>
-
-              {candidate.summary && (
-                <p className="text-sm text-navy-500 mb-4 line-clamp-2 leading-relaxed">{candidate.summary}</p>
-              )}
-
-              {candidate.skills.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {(candidate.skills as string[]).slice(0, 4).map((skill, i) => (
-                    <span key={i} className="text-[11px] font-medium bg-navy-50 text-navy-600 px-2.5 py-1 rounded-md border border-navy-100/60">{skill}</span>
+        {/* Candidate Cards — grouped by role when multiple roles exist */}
+        {useGroupedLayout ? (
+          <div className="space-y-10">
+            {roleGroups.filter(g => g.candidates.length > 0).map((group) => (
+              <div key={group.id}>
+                <h2 className="text-lg font-bold text-navy-950 mb-1">{group.title}</h2>
+                <p className="text-navy-400 text-sm mb-5">{group.candidates.length} candidate{group.candidates.length !== 1 ? "s" : ""}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {group.candidates.map((candidate) => (
+                    <CandidateCard key={candidate.id} candidate={candidate} onClick={() => setSelectedCandidate(candidate)} />
                   ))}
-                  {(candidate.skills as string[]).length > 4 && (
-                    <span className="text-[11px] text-navy-400 font-medium px-1.5 py-1">+{(candidate.skills as string[]).length - 4}</span>
-                  )}
                 </div>
-              )}
-            </button>
-          ))}
-        </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stagger-children">
+            {filteredCandidates.map((candidate) => (
+              <CandidateCard key={candidate.id} candidate={candidate} onClick={() => setSelectedCandidate(candidate)} />
+            ))}
+          </div>
+        )}
 
         {filteredCandidates.length === 0 && (
           <div className="text-center py-16">
@@ -483,6 +483,9 @@ function ReviewCandidateView({
             <div>
               <p className="text-orange-400 text-xs font-semibold uppercase tracking-widest mb-1">Candidate Profile</p>
               <h1 className="text-3xl font-bold tracking-tight">{candidate.firstName}</h1>
+              {candidate.role && (
+                <p className="text-navy-300 text-sm mt-1">{candidate.role.title}</p>
+              )}
             </div>
           </div>
         </div>
@@ -490,10 +493,10 @@ function ReviewCandidateView({
         {/* Profile Content */}
         <div className="bg-white rounded-b-2xl border border-t-0 border-navy-100/80 shadow-sm">
           <div className="p-10 space-y-10">
-            {candidate.summary && (
+            {(candidate.tailoredSummary || candidate.summary) && (
               <div>
                 <h2 className="text-[11px] font-bold text-orange-500 uppercase tracking-[0.15em] mb-3">Summary</h2>
-                <p className="text-navy-700 leading-[1.75] text-[15px]">{candidate.summary}</p>
+                <p className="text-navy-700 leading-[1.75] text-[15px]">{candidate.tailoredSummary || candidate.summary}</p>
               </div>
             )}
 
@@ -628,6 +631,51 @@ function ReviewCandidateView({
         </div>
       </div>
     </div>
+  );
+}
+
+function CandidateCard({ candidate, onClick }: { candidate: Candidate; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="bg-white rounded-2xl border border-navy-100/80 p-6 text-left card-hover group shadow-sm"
+    >
+      <div className="flex items-center gap-3.5 mb-4">
+        {candidate.pictureUrl ? (
+          <img src={candidate.pictureUrl} alt="" className="w-14 h-14 rounded-xl object-cover ring-2 ring-navy-100" />
+        ) : (
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-lg font-bold text-navy-600">
+            {candidate.firstName[0]}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-navy-900 group-hover:text-orange-600 transition-colors text-base">
+            {candidate.firstName}
+          </h3>
+          {candidate.myReview && candidate.myReview.status !== "NOT_REVIEWED" ? (
+            <ReviewBadge status={candidate.myReview.status} />
+          ) : (
+            <span className="text-[11px] font-semibold text-navy-400">Awaiting review</span>
+          )}
+        </div>
+        <svg className="w-5 h-5 text-navy-200 group-hover:text-orange-400 transition-colors shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+
+      {(candidate.tailoredSummary || candidate.summary) && (
+        <p className="text-sm text-navy-500 mb-4 line-clamp-2 leading-relaxed">{candidate.tailoredSummary || candidate.summary}</p>
+      )}
+
+      {candidate.skills.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {(candidate.skills as string[]).slice(0, 4).map((skill, i) => (
+            <span key={i} className="text-[11px] font-medium bg-navy-50 text-navy-600 px-2.5 py-1 rounded-md border border-navy-100/60">{skill}</span>
+          ))}
+          {(candidate.skills as string[]).length > 4 && (
+            <span className="text-[11px] text-navy-400 font-medium px-1.5 py-1">+{(candidate.skills as string[]).length - 4}</span>
+          )}
+        </div>
+      )}
+    </button>
   );
 }
 

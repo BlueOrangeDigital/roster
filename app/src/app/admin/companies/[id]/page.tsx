@@ -3,25 +3,26 @@
 import { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 
-interface Review {
+interface RoleAssignment {
   id: string;
-  status: string;
-  feedback: string | null;
-  reviewer: { name: string | null; email: string; id: string };
-  updatedAt: string;
-}
-
-interface Assignment {
-  id: string;
+  tailoredSummary: string | null;
   candidate: {
     id: string;
     firstName: string;
     lastName: string | null;
+    email: string;
+    pictureUrl: string | null;
     summary: string | null;
     skills: string[];
-    pictureUrl: string | null;
+    experience: any[];
   };
-  reviews: Review[];
+}
+
+interface Role {
+  id: string;
+  title: string;
+  description: string | null;
+  assignments: RoleAssignment[];
 }
 
 interface Reviewer {
@@ -38,7 +39,7 @@ interface Company {
   notes: string | null;
   shareToken: string;
   isActive: boolean;
-  assignments: Assignment[];
+  roles: Role[];
   reviewers: Reviewer[];
 }
 
@@ -46,6 +47,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showAddCandidates, setShowAddCandidates] = useState(false);
   const [allCandidates, setAllCandidates] = useState<any[]>([]);
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
@@ -53,50 +55,132 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const [reviewerName, setReviewerName] = useState("");
   const [addingReviewer, setAddingReviewer] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Role state
+  const [addingRole, setAddingRole] = useState(false);
+  const [newRoleTitle, setNewRoleTitle] = useState("");
+  const [newRoleDescription, setNewRoleDescription] = useState("");
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editRoleTitle, setEditRoleTitle] = useState("");
+  const [editRoleDescription, setEditRoleDescription] = useState("");
+  const [assigningToRoleId, setAssigningToRoleId] = useState<string | null>(null);
+  const [assigningCandidates, setAssigningCandidates] = useState(false);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
 
   const fetchCompany = useCallback(async () => {
-    const res = await fetch(`/api/companies/${id}`);
-    const data = await res.json();
-    setCompany(data);
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/companies/${id}`);
+      if (!res.ok) {
+        setError("Failed to load company");
+        setLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setCompany(data);
+    } catch {
+      setError("Network error");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { fetchCompany(); }, [fetchCompany]);
 
-  async function handleAssignCandidates() {
-    const candidateIds = Array.from(selectedCandidates);
-    await fetch(`/api/companies/${id}/assign`, {
+  async function handleAddRole(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newRoleTitle.trim()) return;
+    await fetch(`/api/companies/${id}/roles`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ candidateIds }),
+      body: JSON.stringify({ title: newRoleTitle.trim(), description: newRoleDescription.trim() || null }),
     });
-    setShowAddCandidates(false);
-    setSelectedCandidates(new Set());
-    fetchCompany();
+    setAddingRole(false);
+    setNewRoleTitle("");
+    setNewRoleDescription("");
+    await fetchCompany();
   }
 
-  async function handleRemoveCandidate(candidateId: string) {
-    await fetch(`/api/companies/${id}/assign`, {
-      method: "DELETE",
+  async function handleUpdateRole(roleId: string, e: React.FormEvent) {
+    e.preventDefault();
+    await fetch(`/api/companies/${id}/roles/${roleId}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ candidateId }),
+      body: JSON.stringify({ title: editRoleTitle.trim(), description: editRoleDescription.trim() || null }),
     });
-    fetchCompany();
+    setEditingRoleId(null);
+    await fetchCompany();
+  }
+
+  async function handleDeleteRole(roleId: string) {
+    if (!confirm("Delete this role? Candidates will be unassigned.")) return;
+    setDeletingRoleId(roleId);
+    try {
+      await fetch(`/api/companies/${id}/roles/${roleId}`, { method: "DELETE" });
+      await fetchCompany();
+    } finally {
+      setDeletingRoleId(null);
+    }
+  }
+
+  async function openRoleCandidatePicker(roleId: string) {
+    const res = await fetch("/api/candidates");
+    const data = await res.json();
+    setAllCandidates(data);
+    setAssigningToRoleId(roleId);
+    setSelectedCandidates(new Set());
+    setShowAddCandidates(true);
+  }
+
+  async function handleAssignCandidates() {
+    if (!assigningToRoleId) return;
+    const candidateIds = Array.from(selectedCandidates);
+    setAssigningCandidates(true);
+    try {
+      await fetch(`/api/companies/${id}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateIds, roleId: assigningToRoleId }),
+      });
+      setShowAddCandidates(false);
+      setSelectedCandidates(new Set());
+      setAssigningToRoleId(null);
+      await fetchCompany();
+    } finally {
+      setAssigningCandidates(false);
+    }
+  }
+
+  async function handleRemoveFromRole(candidateId: string, roleId: string) {
+    await fetch(`/api/companies/${id}/assign?candidateId=${candidateId}&roleId=${roleId}`, { method: "DELETE" });
+    await fetchCompany();
+  }
+
+  async function handleRegenerate(assignmentId: string, roleId: string) {
+    setRegeneratingId(assignmentId);
+    try {
+      const res = await fetch(`/api/companies/${id}/roles/${roleId}/assignments/${assignmentId}/tailor`, { method: "POST" });
+      if (res.ok) await fetchCompany();
+    } finally {
+      setRegeneratingId(null);
+    }
   }
 
   async function handleAddReviewer(e: React.FormEvent) {
     e.preventDefault();
     setAddingReviewer(true);
-    await fetch(`/api/companies/${id}/reviewers`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: reviewerEmail, name: reviewerName }),
-    });
-    setReviewerEmail("");
-    setReviewerName("");
-    setAddingReviewer(false);
-    fetchCompany();
+    try {
+      await fetch(`/api/companies/${id}/reviewers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: reviewerEmail, name: reviewerName }),
+      });
+      setReviewerEmail("");
+      setReviewerName("");
+      await fetchCompany();
+    } finally {
+      setAddingReviewer(false);
+    }
   }
 
   async function handleRemoveReviewer(reviewerId: string) {
@@ -105,12 +189,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reviewerId }),
     });
-    fetchCompany();
+    await fetchCompany();
   }
 
   async function handleRegenerateLink() {
     const res = await fetch(`/api/companies/${id}/regenerate-link`, { method: "POST" });
-    if (res.ok) fetchCompany();
+    if (res.ok) await fetchCompany();
   }
 
   async function handleToggleActive() {
@@ -120,7 +204,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !company.isActive }),
     });
-    fetchCompany();
+    await fetchCompany();
   }
 
   function copyLink() {
@@ -131,31 +215,11 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     setTimeout(() => setCopied(false), 2000);
   }
 
-  async function openCandidatePicker() {
-    const res = await fetch("/api/candidates");
-    const data = await res.json();
-    setAllCandidates(data);
-    setShowAddCandidates(true);
-  }
-
-  function getOverallStatus(reviews: Review[]) {
-    if (reviews.length === 0) return "NOT_REVIEWED";
-    const statuses = reviews.map((r) => r.status);
-    if (statuses.includes("REQUEST_INTERVIEW")) return "REQUEST_INTERVIEW";
-    if (statuses.includes("INTERESTED")) return "INTERESTED";
-    if (statuses.includes("NOT_INTERESTED")) return "NOT_INTERESTED";
-    return "NOT_REVIEWED";
-  }
-
-  const filteredAssignments = company?.assignments.filter((a) => {
-    if (statusFilter === "all") return true;
-    return getOverallStatus(a.reviews) === statusFilter;
-  }) ?? [];
-
   if (loading) {
     return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-2 border-navy-200 border-t-orange-500" /></div>;
   }
 
+  if (error) return <p className="text-red-600">{error}</p>;
   if (!company) return <p className="text-red-600">Company not found</p>;
 
   return (
@@ -166,7 +230,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         </Link>
         <div className="flex items-center gap-3 flex-1">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-sm font-bold text-navy-600 shrink-0">
-            {company.name[0]}
+            {company.name[0] ?? "?"}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-navy-950 tracking-tight">{company.name}</h1>
@@ -185,122 +249,180 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Share Link */}
-          <div className="bg-white rounded-2xl border border-navy-100/80 p-6 shadow-sm">
+          <div className="bg-white rounded-lg border border-navy-200 p-6">
             <h2 className="text-sm font-bold text-navy-950 mb-3 flex items-center gap-2">
               <svg className="w-4 h-4 text-navy-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
               Client Review Link
             </h2>
             <div className="flex items-center gap-2">
-              <code className="flex-1 bg-navy-50 px-4 py-2.5 rounded-xl text-xs text-navy-600 overflow-x-auto font-mono border border-navy-100/60">
+              <code className="flex-1 bg-navy-50 px-4 py-2.5 rounded-md text-xs text-navy-600 overflow-x-auto font-mono border border-navy-200">
                 {typeof window !== "undefined" ? `${window.location.origin}/review/${company.shareToken}` : `/review/${company.shareToken}`}
               </code>
               <button onClick={copyLink}
-                className={`px-4 py-2.5 text-xs font-semibold rounded-xl shrink-0 transition-all ${copied ? "bg-green-500 text-white" : "bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-sm shadow-orange-500/20"}`}>
+                className={`px-4 py-2.5 text-xs font-semibold rounded-md shrink-0 transition-all ${copied ? "bg-green-500 text-white" : "bg-orange-500 hover:bg-orange-600 text-white"}`}>
                 {copied ? "Copied!" : "Copy"}
               </button>
               <button onClick={handleRegenerateLink}
-                className="px-4 py-2.5 border border-navy-200 text-navy-600 text-xs font-semibold rounded-xl hover:bg-navy-50 shrink-0">
+                className="px-4 py-2.5 border border-navy-200 text-navy-600 text-xs font-semibold rounded-md hover:bg-navy-50 shrink-0">
                 Regenerate
               </button>
             </div>
           </div>
 
-          {/* Assigned Candidates */}
-          <div className="bg-white rounded-2xl border border-navy-100/80 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-bold text-navy-950 flex items-center gap-2">
-                <div className="w-1 h-5 bg-orange-500 rounded-full" />
-                Candidates ({company.assignments.length})
-              </h2>
-              <div className="flex items-center gap-3">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="text-xs border border-navy-200 rounded-lg px-3 py-2 text-navy-600 focus:outline-none bg-cream-50/50 font-medium"
-                >
-                  <option value="all">All</option>
-                  <option value="NOT_REVIEWED">Not Reviewed</option>
-                  <option value="INTERESTED">Interested</option>
-                  <option value="REQUEST_INTERVIEW">Interview Requested</option>
-                  <option value="NOT_INTERESTED">Not Interested</option>
-                </select>
-                <button onClick={openCandidatePicker}
-                  className="text-sm text-orange-500 hover:text-orange-600 font-semibold">
-                  + Assign
+          {/* Roles */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-navy-950">Roles ({company.roles.length})</h2>
+              {!addingRole && (
+                <button onClick={() => setAddingRole(true)} className="text-sm text-orange-500 hover:text-orange-600 font-semibold">
+                  + Add Role
                 </button>
-              </div>
+              )}
             </div>
 
-            {filteredAssignments.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-10 h-10 bg-navy-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-5 h-5 text-navy-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
+            {/* Add Role form */}
+            {addingRole && (
+              <form onSubmit={handleAddRole} className="bg-white rounded-lg border border-navy-200 p-4 space-y-3">
+                <input
+                  autoFocus
+                  value={newRoleTitle}
+                  onChange={(e) => setNewRoleTitle(e.target.value)}
+                  placeholder="Role title (e.g. Senior Engineer)"
+                  className="w-full px-3 py-2 border border-navy-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
+                  required
+                />
+                <textarea
+                  value={newRoleDescription}
+                  onChange={(e) => setNewRoleDescription(e.target.value)}
+                  placeholder="Role description / requirements (optional)"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-navy-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 resize-none"
+                />
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => { setAddingRole(false); setNewRoleTitle(""); setNewRoleDescription(""); }}
+                    className="px-4 py-2 text-sm text-navy-600 hover:bg-navy-50 rounded-md font-medium">Cancel</button>
+                  <button type="submit"
+                    className="px-4 py-2 text-sm bg-orange-500 hover:bg-orange-600 text-white rounded-md font-semibold">Save Role</button>
                 </div>
-                <p className="text-navy-400 text-sm">No candidates assigned</p>
+              </form>
+            )}
+
+            {company.roles.length === 0 && !addingRole && (
+              <div className="text-center py-8 bg-white rounded-lg border border-navy-200">
+                <p className="text-navy-400 text-sm">No roles yet. Add a role to start assigning candidates.</p>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {filteredAssignments.map((a) => (
-                  <div key={a.id} className="border border-navy-100/60 rounded-xl p-4 hover:border-navy-200 transition-colors">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
+            )}
+
+            {company.roles.map((role) => (
+              <div key={role.id} className="bg-white rounded-lg border border-navy-200">
+                {/* Role header */}
+                {editingRoleId === role.id ? (
+                  <form onSubmit={(e) => handleUpdateRole(role.id, e)} className="p-4 space-y-3 border-b border-navy-100">
+                    <input
+                      autoFocus
+                      value={editRoleTitle}
+                      onChange={(e) => setEditRoleTitle(e.target.value)}
+                      className="w-full px-3 py-2 border border-navy-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
+                      required
+                    />
+                    <textarea
+                      value={editRoleDescription}
+                      onChange={(e) => setEditRoleDescription(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-navy-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 resize-none"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button type="button" onClick={() => setEditingRoleId(null)}
+                        className="px-3 py-1.5 text-xs text-navy-600 hover:bg-navy-50 rounded-md font-medium">Cancel</button>
+                      <button type="submit"
+                        className="px-3 py-1.5 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded-md font-semibold">Save</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex items-start justify-between p-4 border-b border-navy-100">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-navy-900">{role.title}</h3>
+                      {role.description && <p className="text-xs text-navy-400 mt-1 leading-relaxed">{role.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-1 ml-3 shrink-0">
+                      <button
+                        onClick={() => { setEditingRoleId(role.id); setEditRoleTitle(role.title); setEditRoleDescription(role.description || ""); }}
+                        className="p-1.5 text-navy-400 hover:text-navy-600 hover:bg-navy-50 rounded"
+                        title="Edit role"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRole(role.id)}
+                        disabled={deletingRoleId === role.id}
+                        className="p-1.5 text-navy-400 hover:text-red-500 hover:bg-red-50 rounded"
+                        title="Delete role"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+                      </button>
+                      <button
+                        onClick={() => openRoleCandidatePicker(role.id)}
+                        className="ml-1 px-3 py-1.5 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded font-semibold"
+                      >
+                        + Candidates
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Candidates in this role */}
+                {role.assignments.length === 0 ? (
+                  <p className="text-xs text-navy-400 p-4">No candidates assigned to this role.</p>
+                ) : (
+                  <div className="divide-y divide-navy-50">
+                    {role.assignments.map((a) => (
+                      <div key={a.id} className="flex items-start gap-3 p-4">
                         {a.candidate.pictureUrl ? (
-                          <img src={a.candidate.pictureUrl} alt="" className="w-10 h-10 rounded-full object-cover ring-2 ring-navy-100" />
+                          <img src={a.candidate.pictureUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5" />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-sm font-bold text-navy-600">
+                          <div className="w-8 h-8 rounded-full bg-navy-100 flex items-center justify-center text-xs font-bold text-navy-600 shrink-0 mt-0.5">
                             {a.candidate.firstName[0]}
                           </div>
                         )}
-                        <div>
-                          <Link href={`/admin/candidates/${a.candidate.id}`} className="text-sm font-bold text-navy-900 hover:text-orange-600 transition-colors">
-                            {a.candidate.firstName} {a.candidate.lastName}
-                          </Link>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={getOverallStatus(a.reviews)} />
-                        <button onClick={() => handleRemoveCandidate(a.candidate.id)} className="text-navy-300 hover:text-red-500 p-1 rounded-lg hover:bg-red-50">
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Reviews per reviewer */}
-                    {a.reviews.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-navy-50 space-y-2">
-                        {a.reviews.map((review) => (
-                          <div key={review.id} className="flex items-center justify-between text-xs">
-                            <span className="text-navy-500 font-medium">{review.reviewer.name || review.reviewer.email}</span>
-                            <div className="flex items-center gap-2">
-                              <StatusBadge status={review.status} />
-                              {review.feedback && (
-                                <span className="text-navy-400 max-w-48 truncate italic" title={review.feedback}>
-                                  &ldquo;{review.feedback}&rdquo;
-                                </span>
-                              )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <Link href={`/admin/candidates/${a.candidate.id}`} className="text-sm font-semibold text-navy-900 hover:text-orange-600 transition-colors">
+                              {a.candidate.firstName} {a.candidate.lastName}
+                            </Link>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => handleRegenerate(a.id, role.id)}
+                                disabled={regeneratingId === a.id}
+                                className="p-1 text-navy-400 hover:text-orange-500 hover:bg-orange-50 rounded"
+                                title="Regenerate tailored summary"
+                              >
+                                <svg className={`w-3.5 h-3.5 ${regeneratingId === a.id ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
+                              </button>
+                              <button
+                                onClick={() => handleRemoveFromRole(a.candidate.id, role.id)}
+                                className="p-1 text-navy-400 hover:text-red-500 hover:bg-red-50 rounded"
+                                title="Remove from role"
+                              >
+                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                              </button>
                             </div>
                           </div>
-                        ))}
-                        {company.reviewers
-                          .filter((r) => !a.reviews.some((rev) => rev.reviewer.id === r.id))
-                          .map((r) => (
-                            <div key={r.id} className="flex items-center justify-between text-xs">
-                              <span className="text-navy-400">{r.name || r.email}</span>
-                              <span className="text-navy-300 italic">Not reviewed</span>
-                            </div>
-                          ))}
+                          {(a.tailoredSummary || a.candidate.summary) && (
+                            <p className="text-xs text-navy-500 mt-1 leading-relaxed">{a.tailoredSummary || a.candidate.summary}</p>
+                          )}
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
+            ))}
           </div>
         </div>
 
         {/* Sidebar - Reviewers */}
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-navy-100/80 p-6 shadow-sm">
+          <div className="bg-white rounded-lg border border-navy-200 p-6">
             <h2 className="text-sm font-bold text-navy-950 mb-4 flex items-center gap-2">
               <svg className="w-4 h-4 text-navy-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               Reviewers ({company.reviewers.length})
@@ -322,13 +444,13 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
               )}
             </div>
 
-            <form onSubmit={handleAddReviewer} className="space-y-2.5 pt-4 border-t border-navy-100/60">
+            <form onSubmit={handleAddReviewer} className="space-y-2.5 pt-4 border-t border-navy-200">
               <input
                 type="text"
                 value={reviewerName}
                 onChange={(e) => setReviewerName(e.target.value)}
                 placeholder="Name"
-                className="w-full px-3.5 py-2.5 border border-navy-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 bg-cream-50/50"
+                className="w-full px-3.5 py-2.5 border border-navy-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
               />
               <input
                 type="email"
@@ -336,17 +458,17 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 onChange={(e) => setReviewerEmail(e.target.value)}
                 placeholder="Email"
                 required
-                className="w-full px-3.5 py-2.5 border border-navy-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 bg-cream-50/50"
+                className="w-full px-3.5 py-2.5 border border-navy-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
               />
               <button type="submit" disabled={addingReviewer}
-                className="w-full py-2.5 bg-navy-900 hover:bg-navy-800 text-white text-sm font-semibold rounded-xl disabled:opacity-60">
+                className="w-full py-2.5 bg-navy-900 hover:bg-navy-800 text-white text-sm font-semibold rounded-md disabled:opacity-60">
                 {addingReviewer ? "Adding..." : "Add Reviewer"}
               </button>
             </form>
           </div>
 
           {company.notes && (
-            <div className="bg-white rounded-2xl border border-navy-100/80 p-6 shadow-sm">
+            <div className="bg-white rounded-lg border border-navy-200 p-6">
               <h3 className="text-sm font-bold text-navy-950 mb-2">Notes</h3>
               <p className="text-sm text-navy-500 leading-relaxed">{company.notes}</p>
             </div>
@@ -357,18 +479,19 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       {/* Candidate Picker Modal */}
       {showAddCandidates && (
         <div className="fixed inset-0 bg-navy-950/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl shadow-navy-950/20 border border-navy-100/50 max-h-[80vh] flex flex-col animate-fade-in-scale">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-2xl shadow-navy-950/20 border border-navy-200 max-h-[80vh] flex flex-col animate-fade-in-scale">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-navy-950">Assign Candidates</h2>
-              <button onClick={() => setShowAddCandidates(false)} className="text-navy-400 hover:text-navy-600 p-1 rounded-lg hover:bg-navy-50">
+              <button onClick={() => { setShowAddCandidates(false); setAssigningToRoleId(null); }} className="text-navy-400 hover:text-navy-600 p-1 rounded-lg hover:bg-navy-50">
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="overflow-y-auto flex-1 -mx-2 px-2">
               {allCandidates.map((c) => {
-                const alreadyAssigned = company.assignments.some((a) => a.candidate.id === c.id);
+                const role = company.roles.find(r => r.id === assigningToRoleId);
+                const alreadyAssigned = role?.assignments.some((a) => a.candidate.id === c.id) ?? false;
                 return (
-                  <label key={c.id} className={`flex items-center gap-3 py-3 px-3 rounded-xl cursor-pointer hover:bg-cream-50 ${alreadyAssigned ? "opacity-50" : ""}`}>
+                  <label key={c.id} className={`flex items-center gap-3 py-3 px-3 rounded-lg cursor-pointer hover:bg-cream-50 ${alreadyAssigned ? "opacity-50" : ""}`}>
                     <input
                       type="checkbox"
                       disabled={alreadyAssigned}
@@ -388,37 +511,24 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 );
               })}
             </div>
-            <div className="flex justify-end gap-3 pt-4 border-t border-navy-100 mt-4">
-              <button onClick={() => setShowAddCandidates(false)}
-                className="px-5 py-2.5 text-navy-600 hover:bg-navy-50 rounded-xl text-sm font-semibold">Cancel</button>
-              <button onClick={handleAssignCandidates} disabled={selectedCandidates.size === 0}
-                className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold rounded-xl text-sm disabled:opacity-60 shadow-sm shadow-orange-500/20">
-                Assign {selectedCandidates.size > 0 ? `(${selectedCandidates.size})` : ""}
+            <div className="flex justify-end gap-3 pt-4 border-t border-navy-200 mt-4">
+              <button onClick={() => { setShowAddCandidates(false); setAssigningToRoleId(null); setSelectedCandidates(new Set()); }}
+                className="px-5 py-2.5 text-navy-600 hover:bg-navy-50 rounded-md text-sm font-semibold">Cancel</button>
+              <button onClick={handleAssignCandidates} disabled={selectedCandidates.size === 0 || assigningCandidates}
+                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-md text-sm disabled:opacity-60 inline-flex items-center gap-2">
+                {assigningCandidates ? (
+                  <>
+                    <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Assigning...
+                  </>
+                ) : (
+                  <>Assign {selectedCandidates.size > 0 ? `(${selectedCandidates.size})` : ""}</>
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    INTERESTED: "bg-green-50 text-green-700 border-green-200",
-    REQUEST_INTERVIEW: "bg-orange-50 text-orange-700 border-orange-200",
-    NOT_INTERESTED: "bg-red-50 text-red-700 border-red-200",
-    NOT_REVIEWED: "bg-navy-50 text-navy-500 border-navy-200",
-  };
-  const labels: Record<string, string> = {
-    INTERESTED: "Interested",
-    REQUEST_INTERVIEW: "Interview",
-    NOT_INTERESTED: "Not Interested",
-    NOT_REVIEWED: "Pending",
-  };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${styles[status] || styles.NOT_REVIEWED}`}>
-      {labels[status] || status}
-    </span>
   );
 }

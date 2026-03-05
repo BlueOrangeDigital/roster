@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { randomUUID } from "crypto";
 
 export async function GET(
   req: NextRequest,
@@ -25,6 +24,27 @@ export async function GET(
         },
       },
       reviewers: { select: { id: true, name: true, email: true } },
+      roles: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          assignments: {
+            include: {
+              candidate: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  pictureUrl: true,
+                  summary: true,
+                  skills: true,
+                  experience: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 
