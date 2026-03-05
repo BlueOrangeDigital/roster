@@ -56,10 +56,19 @@ export default function CandidatesPage() {
   const [importMessage, setImportMessage] = useState("");
 
   const fetchCandidates = useCallback(async () => {
-    const res = await fetch("/api/candidates");
-    const data = await res.json();
-    setCandidates(data);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/candidates");
+      if (!res.ok) {
+        setCandidates([]);
+        return;
+      }
+      const data = await res.json();
+      setCandidates(Array.isArray(data) ? data : []);
+    } catch {
+      setCandidates([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -67,6 +76,7 @@ export default function CandidatesPage() {
   }, [fetchCandidates]);
 
   function openPanel() {
+    if (jobsLoading) return;
     setShowPanel(true);
     setSelectedJob(null);
     setTtCandidates([]);
@@ -134,6 +144,7 @@ export default function CandidatesPage() {
   }
 
   function toggleSelect(id: string) {
+    setImportMessage("");
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -334,24 +345,19 @@ export default function CandidatesPage() {
                   <button onClick={() => setSelected(new Set())} className="text-sm text-navy-400 hover:text-navy-600 font-medium">
                     Clear selection
                   </button>
-                  <div className="flex items-center gap-3">
-                    {importMessage && (
-                      <span className={`text-sm font-medium ${importMessage.includes("fail") ? "text-red-600" : "text-green-600"}`}>
-                        {importMessage}
-                      </span>
-                    )}
-                    <button
-                      onClick={handleImport}
-                      disabled={importing}
-                      className="px-5 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl shadow-sm shadow-orange-500/20"
-                    >
-                      {importing ? "Importing…" : `Import ${selected.size} selected`}
-                    </button>
-                  </div>
+                  <button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="px-5 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl shadow-sm shadow-orange-500/20"
+                  >
+                    {importing ? "Importing…" : `Import ${selected.size} selected`}
+                  </button>
                 </div>
               )}
-              {importMessage && selected.size === 0 && (
-                <p className="text-sm text-green-600 font-medium mt-3">{importMessage}</p>
+              {importMessage && (
+                <p className={`text-sm font-medium mt-3 ${importMessage.includes("fail") ? "text-red-600" : "text-green-600"}`}>
+                  {importMessage}
+                </p>
               )}
             </>
           )}
