@@ -28,35 +28,45 @@ export async function GET(
       : "https://api.teamtailor.com";
 
   try {
-    // Fetch up to 100 applicants with candidate data included
-    const url = new URL(`${baseUrl}/v1/job-applications`);
-    url.searchParams.set("filter[job]", id);
-    url.searchParams.set("page[size]", "100");
-    url.searchParams.set("include", "candidate");
-
-    const res = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Token token=${config.apiKey}`,
-        "X-Api-Version": "20161108",
-      },
-    });
-
-    if (!res.ok) {
-      return NextResponse.json({ error: "Failed to fetch applicants from Team Tailor" }, { status: 502 });
-    }
-
-    const data = await res.json();
-
-    // Build a map of candidate id → candidate data from included
+    // Paginate through all applicants (TT max page size is 30)
+    const allApps: any[] = [];
     const candidateMap = new Map<string, any>();
-    for (const item of data.included ?? []) {
-      if (item.type === "candidates") {
-        candidateMap.set(item.id, item.attributes);
+    let nextUrl: string | null = (() => {
+      const url = new URL(`${baseUrl}/v1/job-applications`);
+      url.searchParams.set("filter[job]", id);
+      url.searchParams.set("page[size]", "30");
+      url.searchParams.set("include", "candidate");
+      return url.toString();
+    })();
+
+    while (nextUrl) {
+      const res: Response = await fetch(nextUrl, {
+        headers: {
+          Authorization: `Token token=${config.apiKey}`,
+          "X-Api-Version": "20161108",
+        },
+      });
+
+      if (!res.ok) {
+        return NextResponse.json({ error: "Failed to fetch applicants from Team Tailor" }, { status: 502 });
       }
+
+      const data: any = await res.json();
+      allApps.push(...(data.data ?? []));
+
+      for (const item of data.included ?? []) {
+        if (item.type === "candidates") {
+          candidateMap.set(item.id, item.attributes);
+        }
+      }
+
+      nextUrl = data.links?.next ?? null;
+      // Cap at 300 applicants to avoid runaway pagination
+      if (allApps.length >= 300) break;
     }
 
     // Get TT candidate IDs to resolve import status
-    const ttIds = [...candidateMap.keys()];
+    const ttIds = [...candidateMap.keys()].slice(0, 300);
     const existing = await prisma.candidate.findMany({
       where: { teamTailorId: { in: ttIds } },
       select: { teamTailorId: true, id: true },
@@ -66,7 +76,7 @@ export async function GET(
     // Deduplicate by candidate id (a candidate may have multiple applications)
     const seen = new Set<string>();
     const candidates = [];
-    for (const app of data.data ?? []) {
+    for (const app of allApps) {
       const candidateId = app.relationships?.candidate?.data?.id;
       if (!candidateId || seen.has(candidateId)) continue;
       seen.add(candidateId);
@@ -95,7 +105,7 @@ export async function GET(
     return NextResponse.json({
       candidates,
       total: candidates.length,
-      totalInTT: data.meta?.["record-count"] ?? candidates.length,
+      totalInTT: allApps.length,
     });
   } catch {
     return NextResponse.json({ error: "Failed to fetch applicants from Team Tailor" }, { status: 502 });
