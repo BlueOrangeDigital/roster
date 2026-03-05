@@ -25,9 +25,10 @@ export async function GET(req: NextRequest) {
 
   let ttData: any;
   try {
-    const res = await fetch(
-      `${baseUrl}/v1/candidates?filter%5Bquery%5D=${encodeURIComponent(q)}&page%5Bsize%5D=20`,
-      {
+    const url = new URL(`${baseUrl}/v1/candidates`);
+    url.searchParams.set("filter[query]", q);
+    url.searchParams.set("page[size]", "20");
+    const res = await fetch(url.toString(), {
         headers: {
           Authorization: `Token token=${config.apiKey}`,
           "X-Api-Version": "20161108",
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Resolve imported status for matched candidates
-  const ttIds = (ttData.data ?? []).map((c: any) => c.id);
+  const ttIds = (ttData.data ?? []).slice(0, 20).map((c: any) => c.id);
   const existing = await prisma.candidate.findMany({
     where: { teamTailorId: { in: ttIds } },
     select: { teamTailorId: true, id: true },
