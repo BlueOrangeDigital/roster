@@ -42,7 +42,7 @@ export async function GET(
             where: { reviewerId: session.user.id },
           },
           role: {
-            select: { id: true, title: true, description: true },
+            select: { id: true, title: true },
           },
         },
       });

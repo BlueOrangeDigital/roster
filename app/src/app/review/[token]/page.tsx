@@ -38,7 +38,7 @@ interface Candidate {
 }
 
 interface RoleGroup {
-  id: string | null;
+  id: string;
   title: string;
   candidates: Candidate[];
 }
@@ -310,6 +310,22 @@ export default function ReviewPortal({ params }: { params: Promise<{ token: stri
     );
   }
 
+  const totalRoleCount = new Set(candidates.map(c => c.role?.id ?? "__none__")).size;
+  const useGroupedLayout = totalRoleCount > 1;
+  const roleGroups: RoleGroup[] = [];
+  if (useGroupedLayout) {
+    const seenRoles = new Map<string, RoleGroup>();
+    for (const c of filteredCandidates) {
+      const roleKey = c.role?.id ?? "__none__";
+      if (!seenRoles.has(roleKey)) {
+        const group: RoleGroup = { id: roleKey, title: c.role?.title ?? "General", candidates: [] };
+        seenRoles.set(roleKey, group);
+        roleGroups.push(group);
+      }
+      seenRoles.get(roleKey)!.candidates.push(c);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-cream-50">
       {/* Header */}
@@ -371,41 +387,27 @@ export default function ReviewPortal({ params }: { params: Promise<{ token: stri
         </div>
 
         {/* Candidate Cards — grouped by role when multiple roles exist */}
-        {(() => {
-          const roleGroups: RoleGroup[] = [];
-          const seenRoles = new Map<string | null, RoleGroup>();
-          for (const c of filteredCandidates) {
-            const roleKey = c.role?.id ?? null;
-            if (!seenRoles.has(roleKey)) {
-              const group: RoleGroup = { id: roleKey, title: c.role?.title ?? "General", candidates: [] };
-              seenRoles.set(roleKey, group);
-              roleGroups.push(group);
-            }
-            seenRoles.get(roleKey)!.candidates.push(c);
-          }
-
-          return roleGroups.length > 1 ? (
-            <div className="space-y-10">
-              {roleGroups.map((group) => (
-                <div key={group.id ?? "none"}>
-                  <h2 className="text-lg font-bold text-navy-950 mb-1">{group.title}</h2>
-                  <p className="text-navy-400 text-sm mb-5">{group.candidates.length} candidate{group.candidates.length !== 1 ? "s" : ""}</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {group.candidates.map((candidate) => (
-                      <CandidateCard key={candidate.id} candidate={candidate} onClick={() => setSelectedCandidate(candidate)} />
-                    ))}
-                  </div>
+        {useGroupedLayout ? (
+          <div className="space-y-10">
+            {roleGroups.filter(g => g.candidates.length > 0).map((group) => (
+              <div key={group.id}>
+                <h2 className="text-lg font-bold text-navy-950 mb-1">{group.title}</h2>
+                <p className="text-navy-400 text-sm mb-5">{group.candidates.length} candidate{group.candidates.length !== 1 ? "s" : ""}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {group.candidates.map((candidate) => (
+                    <CandidateCard key={candidate.id} candidate={candidate} onClick={() => setSelectedCandidate(candidate)} />
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stagger-children">
-              {filteredCandidates.map((candidate) => (
-                <CandidateCard key={candidate.id} candidate={candidate} onClick={() => setSelectedCandidate(candidate)} />
-              ))}
-            </div>
-          );
-        })()}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stagger-children">
+            {filteredCandidates.map((candidate) => (
+              <CandidateCard key={candidate.id} candidate={candidate} onClick={() => setSelectedCandidate(candidate)} />
+            ))}
+          </div>
+        )}
 
         {filteredCandidates.length === 0 && (
           <div className="text-center py-16">
