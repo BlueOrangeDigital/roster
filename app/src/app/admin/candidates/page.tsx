@@ -55,10 +55,11 @@ export default function CandidatesPage() {
     if (query.length < 2) {
       setTtCandidates([]);
       setSearchError("");
+      setSearching(false);
       return;
     }
+    setSearching(true);
     const timer = setTimeout(async () => {
-      setSearching(true);
       setSearchError("");
       try {
         const res = await fetch(`/api/teamtailor/search?q=${encodeURIComponent(query)}`);
@@ -72,8 +73,9 @@ export default function CandidatesPage() {
       } catch {
         setSearchError("Couldn't reach Team Tailor. Check your API key has Candidates scope.");
         setTtCandidates([]);
+      } finally {
+        setSearching(false);
       }
-      setSearching(false);
     }, 300);
     return () => clearTimeout(timer);
   }, [query]);
@@ -83,27 +85,36 @@ export default function CandidatesPage() {
     setImporting(true);
     setImportMessage("");
 
-    const toImport = ttCandidates.filter((c) => selected.has(c.teamTailorId));
-    const res = await fetch("/api/teamtailor/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ candidates: toImport }),
-    });
+    try {
+      const toImport = ttCandidates.filter((c) => selected.has(c.teamTailorId));
+      const res = await fetch("/api/teamtailor/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidates: toImport }),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      setImportMessage(`Imported ${data.imported} candidate${data.imported !== 1 ? "s" : ""}`);
-      setSelected(new Set());
-      const refreshed = await fetch(`/api/teamtailor/search?q=${encodeURIComponent(query)}`);
-      if (refreshed.ok) {
-        const d = await refreshed.json();
-        setTtCandidates(d.candidates);
+      if (res.ok) {
+        const data = await res.json();
+        setImportMessage(`Imported ${data.imported} candidate${data.imported !== 1 ? "s" : ""}`);
+        setSelected(new Set());
+        try {
+          const refreshed = await fetch(`/api/teamtailor/search?q=${encodeURIComponent(query)}`);
+          if (refreshed.ok) {
+            const d = await refreshed.json();
+            setTtCandidates(d.candidates);
+          }
+        } catch {
+          // Refresh failure is non-critical — imported candidates will still show on next search
+        }
+        fetchCandidates();
+      } else {
+        setImportMessage("Import failed — please try again");
       }
-      fetchCandidates();
-    } else {
+    } catch {
       setImportMessage("Import failed — please try again");
+    } finally {
+      setImporting(false);
     }
-    setImporting(false);
   }
 
   function toggleSelect(id: string) {
@@ -196,13 +207,12 @@ export default function CandidatesPage() {
                 </thead>
                 <tbody className="divide-y divide-navy-50">
                   {ttCandidates.map((c) => (
-                    <tr key={c.teamTailorId} className="hover:bg-cream-50/50 cursor-pointer" onClick={() => toggleSelect(c.teamTailorId)}>
+                    <tr key={c.teamTailorId} className="hover:bg-cream-50/50">
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
                           checked={selected.has(c.teamTailorId)}
                           onChange={() => toggleSelect(c.teamTailorId)}
-                          onClick={(e) => e.stopPropagation()}
                           className="rounded border-navy-300 text-orange-500 focus:ring-orange-500"
                         />
                       </td>
@@ -212,7 +222,7 @@ export default function CandidatesPage() {
                             <img src={c.pictureUrl} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-navy-100" />
                           ) : (
                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-xs font-bold text-navy-600">
-                              {c.firstName[0]}
+                              {c.firstName[0] ?? "?"}
                             </div>
                           )}
                           <span className="text-sm font-medium text-navy-900">{c.firstName} {c.lastName}</span>
@@ -300,7 +310,7 @@ export default function CandidatesPage() {
                         <img src={c.pictureUrl} alt="" className="w-10 h-10 rounded-full object-cover ring-2 ring-navy-100" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-sm font-bold text-navy-600">
-                          {c.firstName[0]}
+                          {c.firstName[0] ?? "?"}
                         </div>
                       )}
                       <div>
