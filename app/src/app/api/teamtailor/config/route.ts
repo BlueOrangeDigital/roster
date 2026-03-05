@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   // Validate the API key by making a test request
   const baseUrl = apiRegion === "us" ? "https://api.na.teamtailor.com" : "https://api.teamtailor.com";
   try {
-    const testRes = await fetch(`${baseUrl}/v1/candidates?page[size]=1`, {
+    const testRes = await fetch(`${baseUrl}/v1/jobs?page%5Bsize%5D=1`, {
       headers: {
         Authorization: `Token token=${apiKey}`,
         "X-Api-Version": "20161108",
