@@ -90,11 +90,13 @@ model CandidateAssignment {
   company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   roleId          String?
   tailoredSummary String?   @db.Text
-  role            Role?     @relation(fields: [roleId], references: [id])
+  role            Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
   reviews         Review[]
   createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  @@unique([candidateId, roleId])
+  @@unique([candidateId, companyId, roleId])
+  @@index([roleId])
 }
 
 model Review {
