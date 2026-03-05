@@ -41,6 +41,9 @@ export async function GET(
           reviews: {
             where: { reviewerId: session.user.id },
           },
+          role: {
+            select: { id: true, title: true, description: true },
+          },
         },
       });
 
@@ -49,6 +52,8 @@ export async function GET(
         company: { name: company.name },
         candidates: assignments.map((a) => ({
           assignmentId: a.id,
+          tailoredSummary: a.tailoredSummary,
+          role: a.role ? { id: a.role.id, title: a.role.title } : null,
           ...a.candidate,
           myReview: a.reviews[0] || null,
         })),
