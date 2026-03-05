@@ -22,41 +22,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen flex bg-cream-50">
       {/* Sidebar */}
-      <aside className="w-[260px] bg-gradient-to-b from-navy-950 to-[#081220] text-white flex flex-col shrink-0 border-r border-navy-800/50">
+      <aside className="w-[240px] bg-navy-950 text-white flex flex-col shrink-0 border-r border-navy-800/60">
         {/* Logo */}
-        <div className="px-6 py-6 border-b border-navy-800/60">
-          <Link href="/admin" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center shadow-lg shadow-orange-500/20 group-hover:shadow-orange-500/30">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-white">
+        <div className="px-5 py-5 border-b border-navy-800/60">
+          <Link href="/admin" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 bg-orange-500 rounded flex items-center justify-center shrink-0">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-white">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
             <div>
-              <span className="text-lg font-bold tracking-tight block leading-tight">Roster</span>
+              <span className="text-sm font-bold tracking-tight block leading-tight">Roster</span>
               <span className="text-[10px] text-navy-500 font-medium tracking-widest uppercase">Blue Orange</span>
             </div>
           </Link>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-5 space-y-0.5">
+        <nav className="flex-1 px-3 py-4 space-y-px">
           {navItems.map((item) => {
             const active = isActive(item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 ${
+                className={`flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${
                   active
-                    ? "bg-orange-500/12 text-orange-400 shadow-sm shadow-orange-500/5"
+                    ? "bg-white/8 text-white"
                     : "text-navy-400 hover:text-navy-100 hover:bg-white/[0.04]"
                 }`}
               >
-                <item.icon className={`w-[18px] h-[18px] ${active ? "text-orange-400" : ""}`} />
+                <item.icon className={`w-[17px] h-[17px] shrink-0 ${active ? "text-orange-400" : ""}`} />
                 {item.label}
-                {active && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-orange-400" />
-                )}
               </Link>
             );
           })}
@@ -66,13 +63,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="px-3 py-4 border-t border-navy-800/60">
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex items-center gap-3 px-4 py-2.5 rounded-lg text-[13px] font-medium text-navy-500 hover:text-navy-200 hover:bg-white/[0.04] w-full"
+            className="flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium text-navy-500 hover:text-navy-200 hover:bg-white/[0.04] w-full transition-colors"
           >
-            <LogoutIcon className="w-[18px] h-[18px]" />
+            <LogoutIcon className="w-[17px] h-[17px] shrink-0" />
             Sign out
           </button>
-          <div className="flex items-center gap-2 mt-4 px-4">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          <div className="flex items-center gap-2 mt-3 px-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
             <p className="text-navy-600 text-[10px] tracking-wide uppercase font-medium">
               Blue Orange Digital
             </p>

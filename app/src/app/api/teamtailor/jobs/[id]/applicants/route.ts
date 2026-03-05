@@ -97,6 +97,7 @@ export async function GET(
         linkedinUrl: attrs["linkedin-url"] ?? "",
         tags: attrs.tags ?? [],
         pitch: attrs.pitch ?? "",
+        resumeSummary: attrs["resume-summary"] ?? "",
         imported: importedMap.has(candidateId),
         rosterId: importedMap.get(candidateId) ?? null,
       });

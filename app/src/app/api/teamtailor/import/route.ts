@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { extractResume } from "@/lib/extract-resume";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -41,7 +42,8 @@ export async function POST(req: NextRequest) {
       });
       imported.push(updated);
     } else {
-      // New import
+      // New import — extract structured resume data via Claude
+      const extracted = await extractResume(c.resumeUrl ?? null, c.resumeSummary ?? "");
       const created = await prisma.candidate.create({
         data: {
           teamTailorId: c.teamTailorId,
@@ -52,11 +54,11 @@ export async function POST(req: NextRequest) {
           pictureUrl: c.pictureUrl,
           resumeUrl: c.resumeUrl,
           linkedinUrl: c.linkedinUrl,
-          summary: c.pitch || "",
+          summary: extracted.summary || c.pitch || "",
           tags: c.tags || [],
-          skills: [],
-          experience: [],
-          education: [],
+          skills: extracted.skills,
+          experience: extracted.experience,
+          education: extracted.education,
           certifications: [],
           lastSyncedAt: new Date(),
         },
