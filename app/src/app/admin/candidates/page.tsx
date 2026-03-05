@@ -48,6 +48,7 @@ export default function CandidatesPage() {
   const [applicantsLoading, setApplicantsLoading] = useState(false);
   const [applicantsError, setApplicantsError] = useState("");
 
+  const [filterQuery, setFilterQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
@@ -107,6 +108,7 @@ export default function CandidatesPage() {
     setSelectedJob(job);
     setTtCandidates([]);
     setSelected(new Set());
+    setFilterQuery("");
     setImportMessage("");
     setApplicantsError("");
     setApplicantsLoading(true);
@@ -126,6 +128,7 @@ export default function CandidatesPage() {
     setSelectedJob(null);
     setTtCandidates([]);
     setSelected(new Set());
+    setFilterQuery("");
     setImportMessage("");
     setApplicantsError("");
   }
@@ -280,52 +283,13 @@ export default function CandidatesPage() {
                 <p className="text-sm text-navy-400 text-center py-8">No applicants found for this job</p>
               )}
               {!applicantsLoading && ttCandidates.length > 0 && (
-                <div className="border border-navy-200 rounded-md overflow-hidden max-h-80 overflow-y-auto">
-                  <table className="w-full">
-                    <thead className="bg-navy-50 sticky top-0 border-b border-navy-200">
-                      <tr>
-                        <th className="w-10 px-4 py-2.5"></th>
-                        <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-2.5">Name</th>
-                        <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-2.5">Email</th>
-                        <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-2.5">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-navy-100">
-                      {ttCandidates.map((c) => (
-                        <tr key={c.teamTailorId} className="hover:bg-navy-50/40 transition-colors">
-                          <td className="px-4 py-3">
-                            <input
-                              type="checkbox"
-                              checked={selected.has(c.teamTailorId)}
-                              onChange={() => toggleSelect(c.teamTailorId)}
-                              className="rounded border-navy-300 text-orange-500 focus:ring-orange-500"
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2.5">
-                              {c.pictureUrl ? (
-                                <img src={c.pictureUrl} alt="" className="w-7 h-7 rounded-full object-cover ring-1 ring-navy-100" />
-                              ) : (
-                                <div className="w-7 h-7 rounded-full bg-navy-100 flex items-center justify-center text-xs font-bold text-navy-600">
-                                  {c.firstName[0] ?? "?"}
-                                </div>
-                              )}
-                              <span className="text-sm font-medium text-navy-900">{c.firstName} {c.lastName}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-navy-500">{c.email}</td>
-                          <td className="px-4 py-3">
-                            {c.imported ? (
-                              <span className="text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded">Imported</span>
-                            ) : (
-                              <span className="text-[11px] font-semibold bg-navy-50 text-navy-500 border border-navy-200 px-2 py-0.5 rounded">New</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <ApplicantsTable
+                  candidates={ttCandidates}
+                  filterQuery={filterQuery}
+                  onFilterChange={setFilterQuery}
+                  selected={selected}
+                  onToggle={toggleSelect}
+                />
               )}
 
               {selected.size > 0 && (
@@ -439,5 +403,84 @@ export default function CandidatesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function ApplicantsTable({ candidates, filterQuery, onFilterChange, selected, onToggle }: {
+  candidates: TTCandidate[];
+  filterQuery: string;
+  onFilterChange: (q: string) => void;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  const q = filterQuery.toLowerCase();
+  const visible = q
+    ? candidates.filter((c) =>
+        `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q)
+      )
+    : candidates;
+
+  return (
+    <>
+      <div className="relative mb-3">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-navy-400 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input
+          type="text"
+          value={filterQuery}
+          onChange={(e) => onFilterChange(e.target.value)}
+          placeholder="Filter by name or email…"
+          className="w-full pl-8 pr-3 py-2 border border-navy-200 rounded-md text-sm text-navy-950 placeholder:text-navy-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white"
+        />
+      </div>
+      <div className="border border-navy-200 rounded-md overflow-hidden max-h-80 overflow-y-auto">
+        <table className="w-full">
+          <thead className="bg-navy-50 sticky top-0 border-b border-navy-200">
+            <tr>
+              <th className="w-10 px-4 py-2.5"></th>
+              <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-2.5">Name</th>
+              <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-2.5">Email</th>
+              <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-2.5">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-navy-100">
+            {visible.length === 0 ? (
+              <tr><td colSpan={4} className="px-4 py-6 text-sm text-navy-400 text-center">No candidates match &ldquo;{filterQuery}&rdquo;</td></tr>
+            ) : visible.map((c) => (
+              <tr key={c.teamTailorId} className="hover:bg-navy-50/40 transition-colors">
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(c.teamTailorId)}
+                    onChange={() => onToggle(c.teamTailorId)}
+                    className="rounded border-navy-300 text-orange-500 focus:ring-orange-500"
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    {c.pictureUrl ? (
+                      <img src={c.pictureUrl} alt="" className="w-7 h-7 rounded-full object-cover ring-1 ring-navy-100" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-navy-100 flex items-center justify-center text-xs font-bold text-navy-600">
+                        {c.firstName[0] ?? "?"}
+                      </div>
+                    )}
+                    <span className="text-sm font-medium text-navy-900">{c.firstName} {c.lastName}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-sm text-navy-500">{c.email}</td>
+                <td className="px-4 py-3">
+                  {c.imported ? (
+                    <span className="text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded">Imported</span>
+                  ) : (
+                    <span className="text-[11px] font-semibold bg-navy-50 text-navy-500 border border-navy-200 px-2 py-0.5 rounded">New</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
