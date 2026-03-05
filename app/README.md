@@ -318,7 +318,7 @@ All endpoints under `/api/candidates/*` and `/api/companies/*` require an authen
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/teamtailor/config` | ADMIN | Get current config. Returns `{ configured, maskedKey, region, lastSyncAt }`. |
-| `POST` | `/api/teamtailor/config` | ADMIN | Save API key and region. Body: `{ apiKey, apiRegion }`. |
+| `POST` | `/api/teamtailor/config` | ADMIN | Save API key and region. Body: `{ apiKey, apiRegion }`. If `apiKey` is omitted or masked, only the region is updated. New keys are validated against the Team Tailor API before saving. |
 | `GET` | `/api/teamtailor/jobs` | ADMIN | Proxy to Team Tailor — list active job postings. |
 | `GET` | `/api/teamtailor/jobs/[id]/applicants` | ADMIN | Proxy to Team Tailor — list applicants for a specific job. |
 | `POST` | `/api/teamtailor/import` | ADMIN | Import candidates. Body: array of candidate objects from Team Tailor. Upserts on `teamTailorId`. Calls Claude to extract resume data for new candidates. |
@@ -624,7 +624,7 @@ Next.js loads `.env` automatically in dev. Outside of Next.js (e.g. running a no
 node -e "require('dotenv/config'); ..."
 ```
 
-Ensure `/Users/<you>/Projects/roster/app/.env` exists and contains a valid `DATABASE_URL`.
+Ensure `app/.env` (relative to the repo root) exists and contains a valid `DATABASE_URL`.
 
 ### Magic link not working
 
