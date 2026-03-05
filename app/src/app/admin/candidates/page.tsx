@@ -17,6 +17,12 @@ interface Candidate {
   _count: { assignments: number; reviews: number };
 }
 
+interface TTJob {
+  id: string;
+  title: string;
+  status: string;
+}
+
 interface TTCandidate {
   teamTailorId: string;
   firstName: string;
@@ -31,13 +37,22 @@ interface TTCandidate {
 export default function CandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showSync, setShowSync] = useState(false);
-  const [query, setQuery] = useState("");
+  const [showPanel, setShowPanel] = useState(false);
+
+  // Jobs view
+  const [jobs, setJobs] = useState<TTJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState("");
+
+  // Applicants view
+  const [selectedJob, setSelectedJob] = useState<TTJob | null>(null);
   const [ttCandidates, setTtCandidates] = useState<TTCandidate[]>([]);
+  const [applicantsLoading, setApplicantsLoading] = useState(false);
+  const [applicantsError, setApplicantsError] = useState("");
+
+  // Selection & import
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [searching, setSearching] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [searchError, setSearchError] = useState("");
   const [importMessage, setImportMessage] = useState("");
 
   const fetchCandidates = useCallback(async () => {
@@ -51,34 +66,81 @@ export default function CandidatesPage() {
     fetchCandidates();
   }, [fetchCandidates]);
 
-  useEffect(() => {
-    if (query.length < 2) {
-      setTtCandidates([]);
-      setSearchError("");
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
-    const timer = setTimeout(async () => {
-      setSearchError("");
-      try {
-        const res = await fetch(`/api/teamtailor/search?q=${encodeURIComponent(query)}`);
-        const data = await res.json();
-        if (!res.ok) {
-          setSearchError(data.error ?? "Search failed");
-          setTtCandidates([]);
-        } else {
-          setTtCandidates(data.candidates);
-        }
-      } catch {
-        setSearchError("Couldn't reach Team Tailor. Check your API key has Candidates scope.");
-        setTtCandidates([]);
-      } finally {
-        setSearching(false);
+  function openPanel() {
+    setShowPanel(true);
+    setSelectedJob(null);
+    setTtCandidates([]);
+    setSelected(new Set());
+    setImportMessage("");
+    setJobsError("");
+    loadJobs();
+  }
+
+  function closePanel() {
+    setShowPanel(false);
+    setSelectedJob(null);
+    setJobs([]);
+    setTtCandidates([]);
+    setSelected(new Set());
+    setImportMessage("");
+  }
+
+  async function loadJobs() {
+    setJobsLoading(true);
+    setJobsError("");
+    try {
+      const res = await fetch("/api/teamtailor/jobs");
+      const data = await res.json();
+      if (!res.ok) {
+        setJobsError(data.error ?? "Failed to load jobs");
+      } else {
+        setJobs(data.jobs);
       }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
+    } catch {
+      setJobsError("Couldn't reach Team Tailor. Check your API key.");
+    } finally {
+      setJobsLoading(false);
+    }
+  }
+
+  async function selectJob(job: TTJob) {
+    setSelectedJob(job);
+    setTtCandidates([]);
+    setSelected(new Set());
+    setImportMessage("");
+    setApplicantsError("");
+    setApplicantsLoading(true);
+    try {
+      const res = await fetch(`/api/teamtailor/jobs/${job.id}/applicants`);
+      const data = await res.json();
+      if (!res.ok) {
+        setApplicantsError(data.error ?? "Failed to load applicants");
+      } else {
+        setTtCandidates(data.candidates);
+      }
+    } catch {
+      setApplicantsError("Couldn't reach Team Tailor. Check your API key.");
+    } finally {
+      setApplicantsLoading(false);
+    }
+  }
+
+  function backToJobs() {
+    setSelectedJob(null);
+    setTtCandidates([]);
+    setSelected(new Set());
+    setImportMessage("");
+    setApplicantsError("");
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function handleImport() {
     if (selected.size === 0) return;
@@ -97,14 +159,17 @@ export default function CandidatesPage() {
         const data = await res.json();
         setImportMessage(`Imported ${data.imported} candidate${data.imported !== 1 ? "s" : ""}`);
         setSelected(new Set());
+        // Refresh applicants to update imported badges
         try {
-          const refreshed = await fetch(`/api/teamtailor/search?q=${encodeURIComponent(query)}`);
-          if (refreshed.ok) {
-            const d = await refreshed.json();
-            setTtCandidates(d.candidates);
+          if (selectedJob) {
+            const refreshed = await fetch(`/api/teamtailor/jobs/${selectedJob.id}/applicants`);
+            if (refreshed.ok) {
+              const d = await refreshed.json();
+              setTtCandidates(d.candidates);
+            }
           }
         } catch {
-          // Refresh failure is non-critical — imported candidates will still show on next search
+          // non-critical
         }
         fetchCandidates();
       } else {
@@ -117,15 +182,6 @@ export default function CandidatesPage() {
     }
   }
 
-  function toggleSelect(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-8">
@@ -134,141 +190,170 @@ export default function CandidatesPage() {
           <p className="text-navy-500 text-sm mt-1">{candidates.length} candidates in Roster</p>
         </div>
         <button
-          onClick={() => { setShowSync(!showSync); if (showSync) { setQuery(""); setTtCandidates([]); setSelected(new Set()); } }}
+          onClick={openPanel}
           className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold rounded-xl shadow-sm shadow-orange-500/20 hover:shadow-orange-500/30 text-sm flex items-center gap-2"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
           Add from Team Tailor
         </button>
       </div>
 
-      {/* Team Tailor Search Panel */}
-      {showSync && (
+      {/* Team Tailor Panel */}
+      {showPanel && (
         <div className="bg-white rounded-2xl border border-navy-100/80 p-6 mb-6 shadow-sm animate-fade-in-scale">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold text-navy-950 flex items-center gap-2">
-              <div className="w-1 h-5 bg-orange-500 rounded-full" />
-              Add from Team Tailor
-            </h2>
+          {/* Panel header */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              {selectedJob && (
+                <button
+                  onClick={backToJobs}
+                  className="text-navy-400 hover:text-navy-700 p-1 rounded-lg hover:bg-navy-50 transition-colors"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                </button>
+              )}
+              <h2 className="text-base font-bold text-navy-950 flex items-center gap-2">
+                <div className="w-1 h-5 bg-orange-500 rounded-full" />
+                {selectedJob ? selectedJob.title : "Add from Team Tailor"}
+              </h2>
+            </div>
             <button
-              onClick={() => { setShowSync(false); setQuery(""); setTtCandidates([]); setSelected(new Set()); setImportMessage(""); }}
+              onClick={closePanel}
               className="text-navy-400 hover:text-navy-600 p-1 rounded-lg hover:bg-navy-50"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
             </button>
           </div>
 
-          {/* Search input */}
-          <div className="relative mb-4">
-            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-navy-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => { setQuery(e.target.value); setSelected(new Set()); setImportMessage(""); }}
-              placeholder="Search by name or email…"
-              className="w-full pl-10 pr-10 py-3 border border-navy-200 rounded-xl text-navy-950 placeholder:text-navy-300 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 bg-cream-50/50 text-sm"
-              autoFocus
-            />
-            {searching && (
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-navy-200 border-t-orange-500" />
-              </div>
-            )}
-          </div>
-
-          {/* Error */}
-          {searchError && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">{searchError}</p>
-          )}
-
-          {/* Empty state */}
-          {!searching && query.length < 2 && !searchError && (
-            <p className="text-sm text-navy-400 text-center py-8">Start typing to search Team Tailor candidates</p>
-          )}
-
-          {/* No results */}
-          {!searching && query.length >= 2 && ttCandidates.length === 0 && !searchError && (
-            <p className="text-sm text-navy-400 text-center py-8">No candidates found for &ldquo;{query}&rdquo;</p>
-          )}
-
-          {/* Results */}
-          {ttCandidates.length > 0 && (
-            <div className="border border-navy-100 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
-              <table className="w-full">
-                <thead className="bg-navy-50/80 sticky top-0">
-                  <tr>
-                    <th className="w-10 px-4 py-3"></th>
-                    <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-3">Name</th>
-                    <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-3">Email</th>
-                    <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-navy-50">
-                  {ttCandidates.map((c) => (
-                    <tr key={c.teamTailorId} className="hover:bg-cream-50/50">
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(c.teamTailorId)}
-                          onChange={() => toggleSelect(c.teamTailorId)}
-                          className="rounded border-navy-300 text-orange-500 focus:ring-orange-500"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          {c.pictureUrl ? (
-                            <img src={c.pictureUrl} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-navy-100" />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-xs font-bold text-navy-600">
-                              {c.firstName[0] ?? "?"}
-                            </div>
-                          )}
-                          <span className="text-sm font-medium text-navy-900">{c.firstName} {c.lastName}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-navy-500">{c.email}</td>
-                      <td className="px-4 py-3">
-                        {c.imported ? (
-                          <span className="text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200 px-2.5 py-0.5 rounded-full">Imported</span>
-                        ) : (
-                          <span className="text-[11px] font-semibold bg-navy-50 text-navy-500 border border-navy-200 px-2.5 py-0.5 rounded-full">New</span>
-                        )}
-                      </td>
-                    </tr>
+          {/* Jobs view */}
+          {!selectedJob && (
+            <>
+              {jobsLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-7 w-7 border-2 border-navy-200 border-t-orange-500" />
+                  <span className="ml-3 text-navy-500 text-sm">Loading jobs…</span>
+                </div>
+              )}
+              {jobsError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{jobsError}</p>
+              )}
+              {!jobsLoading && !jobsError && jobs.length === 0 && (
+                <p className="text-sm text-navy-400 text-center py-8">No jobs found in Team Tailor</p>
+              )}
+              {!jobsLoading && jobs.length > 0 && (
+                <div className="grid gap-2">
+                  {jobs.map((job) => (
+                    <button
+                      key={job.id}
+                      onClick={() => selectJob(job)}
+                      className="flex items-center justify-between w-full text-left px-4 py-3.5 rounded-xl border border-navy-100 hover:border-orange-300 hover:bg-orange-50/30 transition-all group"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-navy-900 group-hover:text-orange-700 transition-colors">{job.title}</p>
+                        <p className="text-xs text-navy-400 mt-0.5 capitalize">{job.status}</p>
+                      </div>
+                      <svg className="w-4 h-4 text-navy-300 group-hover:text-orange-500 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              )}
+            </>
           )}
 
-          {/* Sticky footer */}
-          {selected.size > 0 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-navy-100">
-              <button onClick={() => setSelected(new Set())} className="text-sm text-navy-400 hover:text-navy-600 font-medium">
-                Clear selection
-              </button>
-              <div className="flex items-center gap-3">
-                {importMessage && (
-                  <span className={`text-sm font-medium ${importMessage.includes("fail") ? "text-red-600" : "text-green-600"}`}>
-                    {importMessage}
-                  </span>
-                )}
-                <button
-                  onClick={handleImport}
-                  disabled={importing}
-                  className="px-5 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl shadow-sm shadow-orange-500/20"
-                >
-                  {importing ? "Importing…" : `Import ${selected.size} selected`}
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Applicants view */}
+          {selectedJob && (
+            <>
+              {applicantsLoading && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-7 w-7 border-2 border-navy-200 border-t-orange-500" />
+                  <span className="ml-3 text-navy-500 text-sm">Loading applicants…</span>
+                </div>
+              )}
+              {applicantsError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{applicantsError}</p>
+              )}
+              {!applicantsLoading && !applicantsError && ttCandidates.length === 0 && (
+                <p className="text-sm text-navy-400 text-center py-8">No applicants found for this job</p>
+              )}
+              {!applicantsLoading && ttCandidates.length > 0 && (
+                <div className="border border-navy-100 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
+                  <table className="w-full">
+                    <thead className="bg-navy-50/80 sticky top-0">
+                      <tr>
+                        <th className="w-10 px-4 py-3"></th>
+                        <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-3">Name</th>
+                        <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-3">Email</th>
+                        <th className="text-left text-[11px] font-semibold text-navy-500 uppercase tracking-wider px-4 py-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-navy-50">
+                      {ttCandidates.map((c) => (
+                        <tr key={c.teamTailorId} className="hover:bg-cream-50/50">
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selected.has(c.teamTailorId)}
+                              onChange={() => toggleSelect(c.teamTailorId)}
+                              className="rounded border-navy-300 text-orange-500 focus:ring-orange-500"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              {c.pictureUrl ? (
+                                <img src={c.pictureUrl} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-navy-100" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-xs font-bold text-navy-600">
+                                  {c.firstName[0] ?? "?"}
+                                </div>
+                              )}
+                              <span className="text-sm font-medium text-navy-900">{c.firstName} {c.lastName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-navy-500">{c.email}</td>
+                          <td className="px-4 py-3">
+                            {c.imported ? (
+                              <span className="text-[11px] font-semibold bg-green-50 text-green-700 border border-green-200 px-2.5 py-0.5 rounded-full">Imported</span>
+                            ) : (
+                              <span className="text-[11px] font-semibold bg-navy-50 text-navy-500 border border-navy-200 px-2.5 py-0.5 rounded-full">New</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-          {/* Import success message when nothing selected */}
-          {importMessage && selected.size === 0 && (
-            <p className="text-sm text-green-600 font-medium mt-3">{importMessage}</p>
+              {/* Footer */}
+              {selected.size > 0 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-navy-100">
+                  <button onClick={() => setSelected(new Set())} className="text-sm text-navy-400 hover:text-navy-600 font-medium">
+                    Clear selection
+                  </button>
+                  <div className="flex items-center gap-3">
+                    {importMessage && (
+                      <span className={`text-sm font-medium ${importMessage.includes("fail") ? "text-red-600" : "text-green-600"}`}>
+                        {importMessage}
+                      </span>
+                    )}
+                    <button
+                      onClick={handleImport}
+                      disabled={importing}
+                      className="px-5 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl shadow-sm shadow-orange-500/20"
+                    >
+                      {importing ? "Importing…" : `Import ${selected.size} selected`}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {importMessage && selected.size === 0 && (
+                <p className="text-sm text-green-600 font-medium mt-3">{importMessage}</p>
+              )}
+            </>
           )}
         </div>
       )}
