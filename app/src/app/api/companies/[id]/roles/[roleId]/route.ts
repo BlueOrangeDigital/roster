@@ -13,10 +13,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (title !== undefined && !title?.trim()) {
     return NextResponse.json({ error: "Title cannot be empty" }, { status: 400 });
   }
+  const data: { title?: string; description?: string | null } = {};
+  if (title !== undefined) data.title = title.trim();
+  if (description !== undefined) data.description = description?.trim() || null;
   try {
     const role = await prisma.role.update({
       where: { id: roleId, companyId: id },
-      data: { title: title?.trim(), description: description?.trim() || null },
+      data,
     });
     return NextResponse.json({ role });
   } catch (e) {

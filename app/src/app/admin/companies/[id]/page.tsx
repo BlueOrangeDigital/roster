@@ -64,6 +64,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const [editRoleTitle, setEditRoleTitle] = useState("");
   const [editRoleDescription, setEditRoleDescription] = useState("");
   const [assigningToRoleId, setAssigningToRoleId] = useState<string | null>(null);
+  const [assigningCandidates, setAssigningCandidates] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
 
@@ -134,15 +135,20 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   async function handleAssignCandidates() {
     if (!assigningToRoleId) return;
     const candidateIds = Array.from(selectedCandidates);
-    await fetch(`/api/companies/${id}/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ candidateIds, roleId: assigningToRoleId }),
-    });
-    setShowAddCandidates(false);
-    setSelectedCandidates(new Set());
-    setAssigningToRoleId(null);
-    await fetchCompany();
+    setAssigningCandidates(true);
+    try {
+      await fetch(`/api/companies/${id}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateIds, roleId: assigningToRoleId }),
+      });
+      setShowAddCandidates(false);
+      setSelectedCandidates(new Set());
+      setAssigningToRoleId(null);
+      await fetchCompany();
+    } finally {
+      setAssigningCandidates(false);
+    }
   }
 
   async function handleRemoveFromRole(candidateId: string, roleId: string) {
@@ -508,9 +514,16 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             <div className="flex justify-end gap-3 pt-4 border-t border-navy-200 mt-4">
               <button onClick={() => { setShowAddCandidates(false); setAssigningToRoleId(null); setSelectedCandidates(new Set()); }}
                 className="px-5 py-2.5 text-navy-600 hover:bg-navy-50 rounded-md text-sm font-semibold">Cancel</button>
-              <button onClick={handleAssignCandidates} disabled={selectedCandidates.size === 0}
-                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-md text-sm disabled:opacity-60">
-                Assign {selectedCandidates.size > 0 ? `(${selectedCandidates.size})` : ""}
+              <button onClick={handleAssignCandidates} disabled={selectedCandidates.size === 0 || assigningCandidates}
+                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-md text-sm disabled:opacity-60 inline-flex items-center gap-2">
+                {assigningCandidates ? (
+                  <>
+                    <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Assigning...
+                  </>
+                ) : (
+                  <>Assign {selectedCandidates.size > 0 ? `(${selectedCandidates.size})` : ""}</>
+                )}
               </button>
             </div>
           </div>

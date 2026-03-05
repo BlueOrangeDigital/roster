@@ -221,7 +221,7 @@ export default function ReviewPortal({ params }: { params: Promise<{ token: stri
                 </div>
                 <p className="text-navy-700 font-bold mb-1">Check your email</p>
                 <p className="text-navy-400 text-sm mb-4">We sent a login link to {email}</p>
-                {magicLink && (
+                {process.env.NODE_ENV === "development" && magicLink && (
                   <button
                     onClick={handleMagicLinkAuth}
                     className="text-sm text-orange-500 hover:text-orange-600 font-semibold underline"
