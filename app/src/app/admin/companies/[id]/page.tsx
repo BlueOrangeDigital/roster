@@ -3,14 +3,6 @@
 import { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 
-interface Review {
-  id: string;
-  status: string;
-  feedback: string | null;
-  reviewer: { name: string | null; email: string; id: string };
-  updatedAt: string;
-}
-
 interface RoleAssignment {
   id: string;
   tailoredSummary: string | null;
@@ -55,6 +47,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showAddCandidates, setShowAddCandidates] = useState(false);
   const [allCandidates, setAllCandidates] = useState<any[]>([]);
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set());
@@ -75,10 +68,20 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
 
   const fetchCompany = useCallback(async () => {
-    const res = await fetch(`/api/companies/${id}`);
-    const data = await res.json();
-    setCompany(data);
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/companies/${id}`);
+      if (!res.ok) {
+        setError("Failed to load company");
+        setLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setCompany(data);
+    } catch {
+      setError("Network error");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { fetchCompany(); }, [fetchCompany]);
@@ -94,7 +97,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     setAddingRole(false);
     setNewRoleTitle("");
     setNewRoleDescription("");
-    fetchCompany();
+    await fetchCompany();
   }
 
   async function handleUpdateRole(roleId: string, e: React.FormEvent) {
@@ -105,15 +108,18 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       body: JSON.stringify({ title: editRoleTitle.trim(), description: editRoleDescription.trim() || null }),
     });
     setEditingRoleId(null);
-    fetchCompany();
+    await fetchCompany();
   }
 
   async function handleDeleteRole(roleId: string) {
     if (!confirm("Delete this role? Candidates will be unassigned.")) return;
     setDeletingRoleId(roleId);
-    await fetch(`/api/companies/${id}/roles/${roleId}`, { method: "DELETE" });
-    setDeletingRoleId(null);
-    fetchCompany();
+    try {
+      await fetch(`/api/companies/${id}/roles/${roleId}`, { method: "DELETE" });
+      await fetchCompany();
+    } finally {
+      setDeletingRoleId(null);
+    }
   }
 
   async function openRoleCandidatePicker(roleId: string) {
@@ -121,6 +127,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     const data = await res.json();
     setAllCandidates(data);
     setAssigningToRoleId(roleId);
+    setSelectedCandidates(new Set());
     setShowAddCandidates(true);
   }
 
@@ -135,33 +142,39 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     setShowAddCandidates(false);
     setSelectedCandidates(new Set());
     setAssigningToRoleId(null);
-    fetchCompany();
+    await fetchCompany();
   }
 
   async function handleRemoveFromRole(candidateId: string, roleId: string) {
     await fetch(`/api/companies/${id}/assign?candidateId=${candidateId}&roleId=${roleId}`, { method: "DELETE" });
-    fetchCompany();
+    await fetchCompany();
   }
 
   async function handleRegenerate(assignmentId: string, roleId: string) {
     setRegeneratingId(assignmentId);
-    const res = await fetch(`/api/companies/${id}/roles/${roleId}/assignments/${assignmentId}/tailor`, { method: "POST" });
-    if (res.ok) fetchCompany();
-    setRegeneratingId(null);
+    try {
+      const res = await fetch(`/api/companies/${id}/roles/${roleId}/assignments/${assignmentId}/tailor`, { method: "POST" });
+      if (res.ok) await fetchCompany();
+    } finally {
+      setRegeneratingId(null);
+    }
   }
 
   async function handleAddReviewer(e: React.FormEvent) {
     e.preventDefault();
     setAddingReviewer(true);
-    await fetch(`/api/companies/${id}/reviewers`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: reviewerEmail, name: reviewerName }),
-    });
-    setReviewerEmail("");
-    setReviewerName("");
-    setAddingReviewer(false);
-    fetchCompany();
+    try {
+      await fetch(`/api/companies/${id}/reviewers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: reviewerEmail, name: reviewerName }),
+      });
+      setReviewerEmail("");
+      setReviewerName("");
+      await fetchCompany();
+    } finally {
+      setAddingReviewer(false);
+    }
   }
 
   async function handleRemoveReviewer(reviewerId: string) {
@@ -170,12 +183,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reviewerId }),
     });
-    fetchCompany();
+    await fetchCompany();
   }
 
   async function handleRegenerateLink() {
     const res = await fetch(`/api/companies/${id}/regenerate-link`, { method: "POST" });
-    if (res.ok) fetchCompany();
+    if (res.ok) await fetchCompany();
   }
 
   async function handleToggleActive() {
@@ -185,7 +198,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !company.isActive }),
     });
-    fetchCompany();
+    await fetchCompany();
   }
 
   function copyLink() {
@@ -200,6 +213,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     return <div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-2 border-navy-200 border-t-orange-500" /></div>;
   }
 
+  if (error) return <p className="text-red-600">{error}</p>;
   if (!company) return <p className="text-red-600">Company not found</p>;
 
   return (
@@ -210,7 +224,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         </Link>
         <div className="flex items-center gap-3 flex-1">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-navy-100 to-navy-200 flex items-center justify-center text-sm font-bold text-navy-600 shrink-0">
-            {company.name[0]}
+            {company.name[0] ?? "?"}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-navy-950 tracking-tight">{company.name}</h1>
