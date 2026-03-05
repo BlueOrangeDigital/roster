@@ -505,23 +505,3 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     </div>
   );
 }
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    INTERESTED: "bg-green-50 text-green-700 border-green-200",
-    REQUEST_INTERVIEW: "bg-orange-50 text-orange-700 border-orange-200",
-    NOT_INTERESTED: "bg-red-50 text-red-700 border-red-200",
-    NOT_REVIEWED: "bg-navy-50 text-navy-500 border-navy-200",
-  };
-  const labels: Record<string, string> = {
-    INTERESTED: "Interested",
-    REQUEST_INTERVIEW: "Interview",
-    NOT_INTERESTED: "Not Interested",
-    NOT_REVIEWED: "Pending",
-  };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${styles[status] || styles.NOT_REVIEWED}`}>
-      {labels[status] || status}
-    </span>
-  );
-}
