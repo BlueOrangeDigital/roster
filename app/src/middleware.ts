@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { auth } from "@/lib/auth";
 
-export async function middleware(req: NextRequest) {
+export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   // Public routes
@@ -19,24 +19,23 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check JWT token
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const session = req.auth;
 
   // Admin routes require admin auth
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/") || pathname === "/") {
-    if (!token) {
+    if (!session?.user) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       return NextResponse.redirect(new URL("/login", req.url));
     }
-    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
+    if (pathname.startsWith("/admin") && (session.user as any).role !== "ADMIN") {
       return NextResponse.redirect(new URL("/login", req.url));
     }
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
