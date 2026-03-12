@@ -23,7 +23,30 @@ export async function POST(req: NextRequest) {
     });
 
     if (existing) {
-      // Resync - update TT fields but preserve manual summary
+      // Resync - update TT fields and re-extract resume if profile is empty
+      const needsExtraction = !existing.summaryIsManual && (
+        !existing.summary ||
+        (Array.isArray(existing.skills) && (existing.skills as unknown[]).length === 0) ||
+        (typeof existing.skills === 'string' && existing.skills === '[]')
+      );
+
+      let extractedData: { summary?: string; skills?: string[]; experience?: unknown[]; education?: unknown[] } = {};
+      if (needsExtraction) {
+        try {
+          const extracted = await extractResume(c.resumeUrl ?? null, c.resumeSummary ?? "");
+          if (extracted.summary || extracted.skills.length > 0) {
+            extractedData = {
+              summary: extracted.summary || c.pitch || undefined,
+              skills: extracted.skills.length > 0 ? extracted.skills : undefined,
+              experience: extracted.experience.length > 0 ? extracted.experience : undefined,
+              education: extracted.education.length > 0 ? extracted.education : undefined,
+            };
+          }
+        } catch (err) {
+          console.error(`Resume extraction failed for TT candidate ${c.teamTailorId}:`, err);
+        }
+      }
+
       const updated = await prisma.candidate.update({
         where: { id: existing.id },
         data: {
@@ -36,14 +59,23 @@ export async function POST(req: NextRequest) {
           linkedinUrl: c.linkedinUrl,
           tags: c.tags || [],
           // Only update summary if not manually edited
-          ...(existing.summaryIsManual ? {} : { summary: c.pitch || existing.summary }),
+          ...(existing.summaryIsManual ? {} : { summary: extractedData.summary || c.pitch || existing.summary }),
+          ...(extractedData.skills ? { skills: extractedData.skills } : {}),
+          ...(extractedData.experience ? { experience: extractedData.experience } : {}),
+          ...(extractedData.education ? { education: extractedData.education } : {}),
           lastSyncedAt: new Date(),
         },
       });
       imported.push(updated);
     } else {
       // New import — extract structured resume data via Claude
-      const extracted = await extractResume(c.resumeUrl ?? null, c.resumeSummary ?? "");
+      let extracted = { summary: "", skills: [] as string[], experience: [] as any[], education: [] as any[] };
+      try {
+        extracted = await extractResume(c.resumeUrl ?? null, c.resumeSummary ?? "");
+      } catch (err) {
+        console.error(`Resume extraction failed for new TT candidate ${c.teamTailorId}:`, err);
+      }
+
       const created = await prisma.candidate.create({
         data: {
           teamTailorId: c.teamTailorId,

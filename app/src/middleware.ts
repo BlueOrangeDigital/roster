@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
+import { getToken } from "next-auth/jwt";
 
-export default auth((req) => {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Public routes
@@ -19,23 +19,30 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  const session = req.auth;
+  // Auth.js v5 uses "authjs" cookie prefix instead of "next-auth"
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+    cookieName: req.nextUrl.protocol === "https:"
+      ? "__Secure-authjs.session-token"
+      : "authjs.session-token",
+  });
 
   // Admin routes require admin auth
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/") || pathname === "/") {
-    if (!session?.user) {
+    if (!token) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       return NextResponse.redirect(new URL("/login", req.url));
     }
-    if (pathname.startsWith("/admin") && (session.user as any).role !== "ADMIN") {
+    if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
       return NextResponse.redirect(new URL("/login", req.url));
     }
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
