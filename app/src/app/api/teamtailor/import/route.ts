@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
             extractedData = {
               summary: extracted.summary || c.pitch || undefined,
               skills: extracted.skills.length > 0 ? extracted.skills : undefined,
-              experience: extracted.experience.length > 0 ? extracted.experience : undefined,
-              education: extracted.education.length > 0 ? extracted.education : undefined,
+              experience: extracted.experience.length > 0 ? (extracted.experience as any) : undefined,
+              education: extracted.education.length > 0 ? (extracted.education as any) : undefined,
             };
           }
         } catch (err) {
@@ -89,8 +89,8 @@ export async function POST(req: NextRequest) {
           summary: extracted.summary || c.pitch || "",
           tags: c.tags || [],
           skills: extracted.skills,
-          experience: extracted.experience,
-          education: extracted.education,
+          experience: extracted.experience as any,
+          education: extracted.education as any,
           certifications: [],
           lastSyncedAt: new Date(),
         },
