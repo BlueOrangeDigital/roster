@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         (typeof existing.skills === 'string' && existing.skills === '[]')
       );
 
-      let extractedData: { summary?: string; skills?: string[]; experience?: unknown[]; education?: unknown[] } = {};
+      let extractedData: { summary?: string; skills?: string[]; experience?: any; education?: any } = {};
       if (needsExtraction) {
         try {
           const extracted = await extractResume(c.resumeUrl ?? null, c.resumeSummary ?? "");
