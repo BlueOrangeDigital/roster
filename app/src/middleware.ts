@@ -13,6 +13,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/review/") ||
     pathname.startsWith("/api/magic-link") ||
     pathname.startsWith("/api/reviews") ||
+    pathname === "/api/health" ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   ) {

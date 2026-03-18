@@ -5,19 +5,27 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["roster", "platform"]
 }
 
 enum UserRole {
   ADMIN
   REVIEWER
+
+  @@schema("roster")
 }
 
 enum ReviewStatus {
   NOT_REVIEWED
   REQUEST_INTERVIEW
   NOT_INTERESTED
+
+  @@schema("roster")
 }
 
+// User model stays UNCHANGED in /prepare-app — auth code depends on role/password fields.
+// The full User model swap (removing role/password, adding @@schema("platform") + @@map("users"))
+// happens in /import-app alongside auth migration.
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
@@ -30,6 +38,8 @@ model User {
   magicTokens   MagicToken[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@schema("roster")
 }
 
 model MagicToken {
@@ -40,6 +50,8 @@ model MagicToken {
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@schema("roster")
 }
 
 model Candidate {
@@ -64,6 +76,8 @@ model Candidate {
   reviews           Review[]
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@schema("roster")
 }
 
 model Company {
@@ -79,6 +93,8 @@ model Company {
   roles        Role[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@schema("roster")
 }
 
 model CandidateAssignment {
@@ -96,6 +112,7 @@ model CandidateAssignment {
 
   @@unique([candidateId, companyId, roleId])
   @@index([roleId])
+  @@schema("roster")
 }
 
 model Review {
@@ -112,6 +129,7 @@ model Review {
   updatedAt    DateTime     @updatedAt
 
   @@unique([reviewerId, candidateId, assignmentId])
+  @@schema("roster")
 }
 
 model TeamTailorConfig {
@@ -121,6 +139,8 @@ model TeamTailorConfig {
   lastSyncAt  DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@schema("roster")
 }
 
 model Role {
@@ -133,4 +153,6 @@ model Role {
 
   company     Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   assignments CandidateAssignment[]
+
+  @@schema("roster")
 }

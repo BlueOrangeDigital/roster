@@ -1,0 +1,27 @@
+# Local verification for /prepare-app
+# Usage: docker compose -f docker-compose.dev.yml up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: roster_dev
+      POSTGRES_USER: roster
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roster"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "3005:3005"
+    environment:
+      ROSTER_DATABASE_URL: postgresql://roster:dev_password@postgres:5432/roster_dev
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
