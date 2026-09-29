@@ -81,8 +81,12 @@ a, button, input, select, textarea, [role="button"] {
   50% { box-shadow: 0 0 0 8px rgba(232, 114, 26, 0); }
 }
 
+/* `backwards`, not `both`: keeping the final `transform` after the animation
+   ends makes this element the containing block for any `position: fixed`
+   descendant, so page-level modals (`fixed inset-0`) would be sized to the
+   page content instead of the viewport. */
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out both;
+  animation: fadeIn 0.4s ease-out backwards;
 }
 
 .animate-fade-in-scale {
